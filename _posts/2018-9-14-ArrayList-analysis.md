@@ -6,16 +6,14 @@ categories: Java
 tags: ArrayList，源码
 ---
 
-可以先看看ArrayList的类实现及继承图
-![alt text](./img/ArrayList源码.jpg)
+
 ```
 public class ArrayList<E> extends AbstractList<E>
         implements List<E>, RandomAccess, Cloneable, java.io.Serializable
 ```
 ArrayList继承自AbstractList,并实现List接口，后面三个接口都是标记接口，其中RandomAccess接口表示
 ArrayLis支持快速随机访问，实现Cloneable接口表示可对该类进行复制，我们知道所有类都继承自Object类，
-而Object类中有clone()方法，如果未实现Cloneable接口直接调用clone方法会抛出CloneNotSuppertedEx-
--ception，剩下一个是Serializable接口，实现该接口才能将ArrayList类序列化。
+而Object类中有clone()方法，如果未实现Cloneable接口直接调用clone方法会抛出CloneNotSuppertedException，剩下一个是Serializable接口，实现该接口才能将ArrayList类序列化。
 ```
 //初始容量为10
 private static final int DEFAULT_CAPACITY = 10;
@@ -68,8 +66,7 @@ public void trimToSize() {
 ```
 public static <T,U> T[] copyOf(U[] original, int newLength, Class<? extends T[]> newType) {
         @SuppressWarnings("unchecked")
-        //先比较newTYPE的类型是否等于Object[].class，是则直接返回一个新数组，不是则会对类型进行
-        //转换
+        //先比较newTYPE的类型是否等于Object[].class，是则直接返回一个新数组，不是则会对类型进行转换
         T[] copy = ((Object)newType == (Object)Object[].class)
             ? (T[]) new Object[newLength]
             : (T[]) Array.newInstance(newType.getComponentType(), newLength);
@@ -110,7 +107,7 @@ private void ensureExplicitCapacity(int minCapacity) {
         if (minCapacity - elementData.length > 0)
             grow(minCapacity);
     }
-//容量增长，首先增长3倍，如果依然不够则按照传入参数来设置长度
+//容量增长，首先增长1.5倍，如果依然不够则按照传入参数来设置长度
 private void grow(int minCapacity) {
         // overflow-conscious code
         int oldCapacity = elementData.length;
@@ -182,5 +179,168 @@ public Object clone() {
             throw new InternalError(e);
         }
     }
+//取得Object数组
+public Object[] toArray() {
+        return Arrays.copyOf(elementData, size);
+    }
+//返回指定类型的数组(需在参数中指定类型)
+public <T> T[] toArray(T[] a) {
+        if (a.length < size)
+            // Make a new array of a's runtime type, but my contents:
+            return (T[]) Arrays.copyOf(elementData, size, a.getClass());
+        System.arraycopy(elementData, 0, a, 0, size);
+        if (a.length > size)
+            a[size] = null;
+        return a;
+    }
+//包内方法，返回指定位置的元素
+E elementData(int index) {
+        return (E) elementData[index];
+    }
+//范围检查，并调用上一个方法
+public E get(int index) {
+        rangeCheck(index);
 
+        return elementData(index);
+    }
+//替换指定位置上的元素，并返回以前的元素
+public E set(int index, E element) {
+        rangeCheck(index);
+
+        E oldValue = elementData(index);
+        elementData[index] = element;
+        return oldValue;
+    }
+//首先确定是否扩容，并在数组末尾增加元素
+public boolean add(E e) {
+        ensureCapacityInternal(size + 1);  // Increments modCount!!
+        elementData[size++] = e;
+        return true;
+    }
+//在指定位置增加一个元素
+public void add(int index, E element) {
+        rangeCheckForAdd(index);
+
+        ensureCapacityInternal(size + 1);  // Increments modCount!!
+        System.arraycopy(elementData, index, elementData, index + 1,
+                         size - index);
+        elementData[index] = element;
+        size++;
+    }
 ```
+可以看到在这些方法中多处调用了System.arraycopy方法，可以来看看该方法的函数原型
+```
+public static native void arraycopy(Object src,  int  srcPos,
+                                        Object dest, int destPos,
+                                        int length);
+```
+其中：src表示源数组，srcPos表示复制的起始位置，dest表示目标数组，desPos表示目标位置，length表示要复制的数组长度
+```
+//删除指定位置的元素
+public E remove(int index) {
+        rangeCheck(index);
+
+        modCount++;
+        E oldValue = elementData(index);
+
+        int numMoved = size - index - 1;
+        if (numMoved > 0)
+            System.arraycopy(elementData, index+1, elementData, index,
+                             numMoved);
+        elementData[--size] = null; // clear to let GC do its work
+
+        return oldValue;
+    }
+//删除某个元素，通过foreach语句
+public boolean remove(Object o) {
+        if (o == null) {
+            for (int index = 0; index < size; index++)
+                if (elementData[index] == null) {
+                    fastRemove(index);
+                    return true;
+                }
+        } else {
+            for (int index = 0; index < size; index++)
+                if (o.equals(elementData[index])) {
+                    fastRemove(index);
+                    return true;
+                }
+        }
+        return false;
+    }
+//将所有元素重置为null
+public void clear() {
+        modCount++;
+
+        // clear to let GC do its work
+        for (int i = 0; i < size; i++)
+            elementData[i] = null;
+
+        size = 0;
+    }
+//将传入的Collection插入到数组末尾
+public boolean addAll(Collection<? extends E> c) {
+        Object[] a = c.toArray();
+        int numNew = a.length;
+        ensureCapacityInternal(size + numNew);  // Increments modCount
+        System.arraycopy(a, 0, elementData, size, numNew);
+        size += numNew;
+        return numNew != 0;
+    }
+//将传入的Collection插入到指定位置
+public boolean addAll(int index, Collection<? extends E> c) {
+        rangeCheckForAdd(index);
+
+        Object[] a = c.toArray();
+        int numNew = a.length;
+        ensureCapacityInternal(size + numNew);  // Increments modCount
+
+        int numMoved = size - index;
+        if (numMoved > 0)
+            System.arraycopy(elementData, index, elementData, index + numNew,
+                             numMoved);
+
+        System.arraycopy(a, 0, elementData, index, numNew);
+        size += numNew;
+        return numNew != 0;
+    }
+//这两个方法都会涉及到传入的参数对比的过程，共同调用了batchRemove()方法
+public boolean removeAll(Collection<?> c) {
+        Objects.requireNonNull(c);
+        return batchRemove(c, false);
+    }
+public boolean retainAll(Collection<?> c) {
+        Objects.requireNonNull(c);
+        return batchRemove(c, true);
+    }
+//可以看看这个私有方法的作用
+private boolean batchRemove(Collection<?> c, boolean complement) {
+        final Object[] elementData = this.elementData;
+        int r = 0, w = 0;
+        boolean modified = false;
+        try {
+            for (; r < size; r++)//可以将两个数组中相同的元素选出来或者将不同的元素选出来
+                if (c.contains(elementData[r]) == complement)
+                    elementData[w++] = elementData[r];
+        } finally {
+            // Preserve behavioral compatibility with AbstractCollection,
+            // even if c.contains() throws.
+            if (r != size) {//如果中途抛出异常，则执行该操作
+                System.arraycopy(elementData, r,
+                                 elementData, w,
+                                 size - r);
+                w += size - r;
+            }
+            if (w != size) {//如果不是全部包含或者全部不包含，则将之后的元素全部置为null
+                // clear to let GC do its work
+                for (int i = w; i < size; i++)
+                    elementData[i] = null;
+                modCount += size - w;
+                size = w;
+                modified = true;
+            }
+        }
+        return modified;
+    }
+```
+关于ArrayList源码的分析就暂时到这里，后面还有部分的Iterator方法以及Spliterator方法和排序sort方法。
